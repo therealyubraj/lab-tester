@@ -95,6 +95,18 @@ static void uart_puts(const char *s)
   }
 }
 
+static void uart_hex_nibble(uint8_t value)
+{
+  value &= 0x0Fu;
+  uart_putc((char)(value < 10u ? ('0' + value) : ('A' + value - 10u)));
+}
+
+static void uart_hex8(uint8_t value)
+{
+  uart_hex_nibble(value >> 4);
+  uart_hex_nibble(value);
+}
+
 static uint8_t uart_has_byte(void)
 {
   return (UCSR0A & (1 << RXC0)) != 0 ? 1u : 0u;
@@ -179,6 +191,17 @@ static void send_frame(const struct TestMessage *msg)
   }
 }
 
+static void log_frame(const struct TestMessage *msg)
+{
+  uart_puts("SENDER dst=");
+  uart_hex8(msg->destination);
+  uart_puts(" src=");
+  uart_hex8(msg->source);
+  uart_puts(" payload=\"");
+  uart_puts(msg->payload);
+  uart_puts("\"\r\n");
+}
+
 int main(void)
 {
   DDRB |= (1 << CLOCK_TX_PIN) | (1 << DATA_TX_PIN);
@@ -201,7 +224,7 @@ int main(void)
     uart_puts("SENDER start\r\n");
 
     for (uint8_t i = 0; i < (uint8_t)(sizeof(messages) / sizeof(messages[0])); i++) {
-      uart_puts("SENDER frame\r\n");
+      log_frame(&messages[i]);
       send_frame(&messages[i]);
       _delay_ms(40);
     }
