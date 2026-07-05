@@ -166,10 +166,10 @@ static void send_frame(const struct TestMessage *msg)
   uint32_t crc = frame_crc(msg);
 
   send_byte(PREAMBLE);
-  send_byte((uint8_t)(crc >> 24));
-  send_byte((uint8_t)(crc >> 16));
-  send_byte((uint8_t)(crc >> 8));
   send_byte((uint8_t)crc);
+  send_byte((uint8_t)(crc >> 8));
+  send_byte((uint8_t)(crc >> 16));
+  send_byte((uint8_t)(crc >> 24));
   send_byte(size);
   send_byte(msg->destination);
   send_byte(msg->source);

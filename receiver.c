@@ -183,10 +183,10 @@ int main(void)
       uint8_t destination;
       uint8_t source;
 
-      received_crc = ((uint32_t)read_byte(&previous_clock) << 24);
-      received_crc |= ((uint32_t)read_byte(&previous_clock) << 16);
+      received_crc = (uint32_t)read_byte(&previous_clock);
       received_crc |= ((uint32_t)read_byte(&previous_clock) << 8);
-      received_crc |= (uint32_t)read_byte(&previous_clock);
+      received_crc |= ((uint32_t)read_byte(&previous_clock) << 16);
+      received_crc |= ((uint32_t)read_byte(&previous_clock) << 24);
 
       size = read_byte(&previous_clock);
       destination = read_byte(&previous_clock);

@@ -61,3 +61,6 @@ the DUT.
 
 The sender waits until it receives `s` or `S` on UART, then sends the full test
 sequence once. Send `s` again to repeat the run.
+
+The CRC field is sent and received in AVR `uint32_t` memory order, matching the
+main project's `read_bit_scattered` / `set_bit_scattered` behavior.
