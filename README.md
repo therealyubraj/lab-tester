@@ -47,6 +47,8 @@ The relayer waits until it receives `s` or `S` on UART before forwarding pins.
 Send `x` or `X` to stop forwarding and drive its outputs low.
 While stopped, it prints `RELAYER idle` once per second. Unknown UART input
 prints `RELAYER unknown`.
+Forwarding itself is interrupt-driven on the input clock pin-change, not a
+polling loop.
 
 ## Build And Flash
 

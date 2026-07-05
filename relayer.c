@@ -18,6 +18,7 @@
 #endif
 
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include <stdint.h>
 #include <util/delay.h>
 
@@ -31,9 +32,13 @@
 #define DATA_TX_PIN PB5
 #define CLOCK_RX_PIN PD4
 #define DATA_RX_PIN PD5
+#define CLOCK_RX_PCINT PCINT20
 
 #define CLOCK_RX_VALUE() ((PIND & (1 << CLOCK_RX_PIN)) != 0)
 #define DATA_RX_VALUE() ((PIND & (1 << DATA_RX_PIN)) != 0)
+
+static volatile uint8_t enabled = 0;
+static volatile uint8_t previous_clock = 0;
 
 static void uart_init(void)
 {
@@ -72,7 +77,7 @@ static void set_outputs_low(void)
   PORTB &= ~((1 << CLOCK_TX_PIN) | (1 << DATA_TX_PIN));
 }
 
-static void relay_tick(void)
+static void relay_edge(void)
 {
   if (DATA_RX_VALUE()) {
     PORTB |= (1 << DATA_TX_PIN);
@@ -87,10 +92,29 @@ static void relay_tick(void)
   }
 }
 
+ISR(PCINT2_vect)
+{
+  uint8_t clock_value = CLOCK_RX_VALUE();
+
+  if (clock_value == previous_clock) {
+    return;
+  }
+  previous_clock = clock_value;
+
+  if (enabled != 0u) {
+    relay_edge();
+  }
+}
+
+static void init_relay_interrupt(void)
+{
+  previous_clock = CLOCK_RX_VALUE();
+  PCICR |= (1 << PCIE2);
+  PCMSK2 |= (1 << CLOCK_RX_PCINT);
+}
+
 int main(void)
 {
-  uint8_t enabled = 0;
-
   DDRB |= (1 << CLOCK_TX_PIN) | (1 << DATA_TX_PIN);
   DDRD &= ~((1 << CLOCK_RX_PIN) | (1 << DATA_RX_PIN));
   PORTD &= ~((1 << CLOCK_RX_PIN) | (1 << DATA_RX_PIN));
@@ -98,6 +122,8 @@ int main(void)
   set_outputs_low();
 
   uart_init();
+  init_relay_interrupt();
+  sei();
   uart_puts("RELAYER idle\r\n");
 
   while (1) {
@@ -105,20 +131,23 @@ int main(void)
       uint8_t command = uart_getc();
 
       if (command == 's' || command == 'S') {
+        cli();
         enabled = 1;
+        previous_clock = CLOCK_RX_VALUE();
+        sei();
         uart_puts("RELAYER start\r\n");
       } else if (command == 'x' || command == 'X') {
+        cli();
         enabled = 0;
         set_outputs_low();
+        sei();
         uart_puts("RELAYER stop\r\n");
       } else {
         uart_puts("RELAYER unknown\r\n");
       }
     }
 
-    if (enabled != 0) {
-      relay_tick();
-    } else {
+    if (enabled == 0u) {
       uart_puts("RELAYER idle\r\n");
       _delay_ms(1000);
     }
