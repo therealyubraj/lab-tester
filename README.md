@@ -6,6 +6,12 @@ This folder contains standalone firmware for a three-board test:
 test sender -> implementation under test -> test receiver
 ```
 
+It also contains a transparent relayer firmware for validating the test setup:
+
+```text
+test sender -> perfect relayer -> test receiver
+```
+
 The sender emits deterministic frames. The receiver prints parsed frames over
 UART as `FRAME ...` lines. Paste those lines into `verifier.html`.
 
@@ -27,11 +33,22 @@ DUT PB5 -> receiver PD5 data RX
 GND shared
 ```
 
+Perfect relayer wiring:
+
+```text
+previous PB4 -> relayer PD4 clock RX
+previous PB5 -> relayer PD5 data RX
+relayer PB4 -> next PD4 clock RX
+relayer PB5 -> next PD5 data RX
+GND shared
+```
+
 ## Build And Flash
 
 ```sh
 make sender
 make receiver
+make relayer
 ```
 
 Override flashing settings if needed:

@@ -14,9 +14,9 @@ AVRDUDE = avrdude
 
 CFLAGS = -mmcu=$(MCU) -DF_CPU=$(F_CPU) -DBAUD=$(BAUD) -DSEND_BPS=$(SEND_BPS) -DTEST_SOURCE=$(TEST_SOURCE) -DTEST_DESTINATION=$(TEST_DESTINATION) -Os -Wall -Wextra -std=c11
 
-.PHONY: all sender receiver sender-build receiver-build clean
+.PHONY: all sender receiver relayer sender-build receiver-build relayer-build clean
 
-all: sender-build receiver-build
+all: sender-build receiver-build relayer-build
 
 sender: $(BUILD_DIR)/sender.hex
 	$(AVRDUDE) -p $(MCU) -c $(PROGRAMMER) -P $(PORT) -U flash:w:$<
@@ -24,9 +24,14 @@ sender: $(BUILD_DIR)/sender.hex
 receiver: $(BUILD_DIR)/receiver.hex
 	$(AVRDUDE) -p $(MCU) -c $(PROGRAMMER) -P $(PORT) -U flash:w:$<
 
+relayer: $(BUILD_DIR)/relayer.hex
+	$(AVRDUDE) -p $(MCU) -c $(PROGRAMMER) -P $(PORT) -U flash:w:$<
+
 sender-build: $(BUILD_DIR)/sender.hex
 
 receiver-build: $(BUILD_DIR)/receiver.hex
+
+relayer-build: $(BUILD_DIR)/relayer.hex
 
 $(BUILD_DIR)/%.elf: %.c
 	mkdir -p $(BUILD_DIR)
