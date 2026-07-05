@@ -21,7 +21,24 @@
 #define BAUD 115200UL
 #endif
 
+#ifndef SEND_BPS
+#define SEND_BPS 1000UL
+#endif
+
+#ifndef TEST_SOURCE
+#define TEST_SOURCE 0x58u
+#endif
+
+#ifndef TEST_DESTINATION
+#define TEST_DESTINATION BROADCAST_ADDRESS
+#endif
+
+#if SEND_BPS == 0
+#error "SEND_BPS must be greater than zero"
+#endif
+
 #define UART_UBRR ((F_CPU / 8UL / BAUD) - 1UL)
+#define SEND_HALF_BIT_US (500000UL / SEND_BPS)
 
 #define CLOCK_TX_PIN PB4
 #define DATA_TX_PIN PB5
@@ -62,18 +79,18 @@ static const uint32_t crc_table[256] PROGMEM = {
 };
 
 static const struct TestMessage messages[] = {
-  {BROADCAST_ADDRESS, 0x58u, "alpha-8391", 0},
-  {BROADCAST_ADDRESS, 0x57u, "bravo-2047", 0},
-  {BROADCAST_ADDRESS, 0x60u, "charlie-7715", 0},
-  {BROADCAST_ADDRESS, 0x56u, "delta-4920", 0},
-  {BROADCAST_ADDRESS, 0x58u, "Send", 0},
-  {BROADCAST_ADDRESS, 0x57u, "echo-1186", 0},
-  {BROADCAST_ADDRESS, 0x60u, "foxtrot-6503", 0},
-  {BROADCAST_ADDRESS, 0x56u, "Send", 0},
-  {BROADCAST_ADDRESS, 0x58u, "golf-3258", 0},
-  {BROADCAST_ADDRESS, 0x57u, "hotel-9064", 0},
-  {BROADCAST_ADDRESS, 0x60u, "india-4472", 0},
-  {BROADCAST_ADDRESS, 0x56u, "juliet-5830", 0}
+  {TEST_DESTINATION, TEST_SOURCE, "alpha-8391", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "bravo-2047", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "charlie-7715", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "delta-4920", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "Send", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "echo-1186", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "foxtrot-6503", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "Send", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "golf-3258", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "hotel-9064", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "india-4472", 0},
+  {TEST_DESTINATION, TEST_SOURCE, "juliet-5830", 0}
 };
 
 static void uart_init(void)
@@ -166,9 +183,9 @@ static void send_bit(uint8_t bit)
     DATA_TX_LOW();
   }
 
-  _delay_us(500);
+  _delay_us(SEND_HALF_BIT_US);
   PINB = (1 << CLOCK_TX_PIN);
-  _delay_us(500);
+  _delay_us(SEND_HALF_BIT_US);
 }
 
 static void send_byte(uint8_t value)

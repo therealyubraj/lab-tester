@@ -171,6 +171,14 @@
           <input id="ownAddress" value="59">
         </label>
         <label>
+          Sender source address, hex
+          <input id="senderSource" value="58">
+        </label>
+        <label>
+          Sender destination address, hex
+          <input id="senderDestination" value="00">
+        </label>
+        <label>
           Expected relayed frames
           <input id="expectedRelays" type="number" min="0" value="12">
         </label>
@@ -209,18 +217,18 @@ FRAME crc=12345678 calc=12345678 ok=1 size=09 dst=60 src=58 payload=72656C61792D
 
   <script>
     const senderPlan = [
-      { kind: "relay", dst: "00", src: "58", ascii: "alpha-8391", ok: true },
-      { kind: "relay", dst: "00", src: "57", ascii: "bravo-2047", ok: true },
-      { kind: "relay", dst: "00", src: "60", ascii: "charlie-7715", ok: true },
-      { kind: "relay", dst: "00", src: "56", ascii: "delta-4920", ok: true },
-      { kind: "relay-trigger", dst: "00", src: "58", ascii: "Send", ok: true },
-      { kind: "relay", dst: "00", src: "57", ascii: "echo-1186", ok: true },
-      { kind: "relay", dst: "00", src: "60", ascii: "foxtrot-6503", ok: true },
-      { kind: "relay-trigger", dst: "00", src: "56", ascii: "Send", ok: true },
-      { kind: "relay", dst: "00", src: "58", ascii: "golf-3258", ok: true },
-      { kind: "relay", dst: "00", src: "57", ascii: "hotel-9064", ok: true },
-      { kind: "relay", dst: "00", src: "60", ascii: "india-4472", ok: true },
-      { kind: "relay", dst: "00", src: "56", ascii: "juliet-5830", ok: true }
+      { kind: "relay", ascii: "alpha-8391", ok: true },
+      { kind: "relay", ascii: "bravo-2047", ok: true },
+      { kind: "relay", ascii: "charlie-7715", ok: true },
+      { kind: "relay", ascii: "delta-4920", ok: true },
+      { kind: "relay-trigger", ascii: "Send", ok: true },
+      { kind: "relay", ascii: "echo-1186", ok: true },
+      { kind: "relay", ascii: "foxtrot-6503", ok: true },
+      { kind: "relay-trigger", ascii: "Send", ok: true },
+      { kind: "relay", ascii: "golf-3258", ok: true },
+      { kind: "relay", ascii: "hotel-9064", ok: true },
+      { kind: "relay", ascii: "india-4472", ok: true },
+      { kind: "relay", ascii: "juliet-5830", ok: true }
     ];
 
     const parseHexByte = value => value.trim().toUpperCase().padStart(2, "0").slice(-2);
@@ -285,6 +293,8 @@ FRAME crc=12345678 calc=12345678 ok=1 size=09 dst=60 src=58 payload=72656C61792D
 
     function verify() {
       const ownAddress = parseHexByte(document.getElementById("ownAddress").value);
+      const senderSource = parseHexByte(document.getElementById("senderSource").value);
+      const senderDestination = parseHexByte(document.getElementById("senderDestination").value);
       const expectedRelays = Number(document.getElementById("expectedRelays").value);
       const expectedOwn = Number(document.getElementById("expectedOwn").value);
       const expectedBadCrcRelays = Number(document.getElementById("expectedBadCrcRelays").value);
@@ -300,6 +310,11 @@ FRAME crc=12345678 calc=12345678 ok=1 size=09 dst=60 src=58 payload=72656C61792D
       renderFrames(frames, ownAddress);
 
       addCheck(results, frames.length > 0, `parsed ${frames.length} FRAME lines`);
+      if (senderSource === ownAddress) {
+        addCheck(results, false, "sender source equals DUT address, relay/own classification will be ambiguous", true);
+      } else {
+        addCheck(results, true, "sender source differs from DUT address");
+      }
       addCheck(results, relays.length === expectedRelays, `relayed frame count is ${relays.length}, expected ${expectedRelays}`);
       addCheck(results, own.length === expectedOwn, `own frame count is ${own.length}, expected ${expectedOwn}`);
       addCheck(results, badCrcRelays.length === expectedBadCrcRelays, `bad-CRC relay count is ${badCrcRelays.length}, expected ${expectedBadCrcRelays}`);
@@ -314,7 +329,8 @@ FRAME crc=12345678 calc=12345678 ok=1 size=09 dst=60 src=58 payload=72656C61792D
       const wrongGoodCrc = relays.filter(frame => !frame.ok);
       addCheck(results, wrongGoodCrc.length === 0, `all normal relays have valid CRC at receiver`);
 
-      addCheck(results, relays.every(frame => frame.dst === "00"), "all relayed sender frames are broadcasts");
+      addCheck(results, relays.every(frame => frame.dst === senderDestination), `all relayed sender frames use destination ${senderDestination}`);
+      addCheck(results, relays.every(frame => frame.src === senderSource), `all relayed sender frames use source ${senderSource}`);
     }
 
     document.getElementById("verify").addEventListener("click", verify);

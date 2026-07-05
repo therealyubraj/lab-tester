@@ -54,6 +54,31 @@ make sender BAUD=57600UL
 make receiver BAUD=57600UL
 ```
 
+Change the sender wire bit rate in one place:
+
+```make
+SEND_BPS ?= 1000UL
+```
+
+or override it per command:
+
+```sh
+make sender SEND_BPS=2000UL
+```
+
+Change the sender frame source and destination in one place:
+
+```make
+TEST_SOURCE ?= 0x58u
+TEST_DESTINATION ?= 0x00u
+```
+
+or override them per command:
+
+```sh
+make sender TEST_SOURCE=0x57u TEST_DESTINATION=0x00u
+```
+
 Build without flashing:
 
 ```sh
