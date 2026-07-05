@@ -39,7 +39,7 @@ static void uart_init(void)
   UBRR0H = (uint8_t)(UART_UBRR >> 8);
   UBRR0L = (uint8_t)UART_UBRR;
   UCSR0A |= (1 << U2X0);
-  UCSR0B |= (1 << TXEN0);
+  UCSR0B |= (1 << RXEN0) | (1 << TXEN0);
   UCSR0C |= (1 << UCSZ01) | (1 << UCSZ00);
 }
 
@@ -56,28 +56,65 @@ static void uart_puts(const char *s)
   }
 }
 
+static uint8_t uart_has_byte(void)
+{
+  return (UCSR0A & (1 << RXC0)) != 0 ? 1u : 0u;
+}
+
+static uint8_t uart_getc(void)
+{
+  return UDR0;
+}
+
+static void set_outputs_low(void)
+{
+  PORTB &= ~((1 << CLOCK_TX_PIN) | (1 << DATA_TX_PIN));
+}
+
+static void relay_tick(void)
+{
+  if (DATA_RX_VALUE()) {
+    PORTB |= (1 << DATA_TX_PIN);
+  } else {
+    PORTB &= ~(1 << DATA_TX_PIN);
+  }
+
+  if (CLOCK_RX_VALUE()) {
+    PORTB |= (1 << CLOCK_TX_PIN);
+  } else {
+    PORTB &= ~(1 << CLOCK_TX_PIN);
+  }
+}
+
 int main(void)
 {
+  uint8_t enabled = 0;
+
   DDRB |= (1 << CLOCK_TX_PIN) | (1 << DATA_TX_PIN);
   DDRD &= ~((1 << CLOCK_RX_PIN) | (1 << DATA_RX_PIN));
   PORTD &= ~((1 << CLOCK_RX_PIN) | (1 << DATA_RX_PIN));
 
-  PORTB &= ~((1 << CLOCK_TX_PIN) | (1 << DATA_TX_PIN));
+  set_outputs_low();
 
   uart_init();
-  uart_puts("RELAYER start\r\n");
+  uart_puts("RELAYER idle\r\n");
 
   while (1) {
-    if (DATA_RX_VALUE()) {
-      PORTB |= (1 << DATA_TX_PIN);
-    } else {
-      PORTB &= ~(1 << DATA_TX_PIN);
+    if (uart_has_byte()) {
+      uint8_t command = uart_getc();
+
+      if (command == 's' || command == 'S') {
+        enabled = 1;
+        uart_puts("RELAYER start\r\n");
+      } else if (command == 'x' || command == 'X') {
+        enabled = 0;
+        set_outputs_low();
+        uart_puts("RELAYER stop\r\n");
+      }
     }
 
-    if (CLOCK_RX_VALUE()) {
-      PORTB |= (1 << CLOCK_TX_PIN);
-    } else {
-      PORTB &= ~(1 << CLOCK_TX_PIN);
+    if (enabled != 0) {
+      relay_tick();
     }
   }
 }

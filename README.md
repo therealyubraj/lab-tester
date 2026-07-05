@@ -43,6 +43,9 @@ relayer PB5 -> next PD5 data RX
 GND shared
 ```
 
+The relayer waits until it receives `s` or `S` on UART before forwarding pins.
+Send `x` or `X` to stop forwarding and drive its outputs low.
+
 ## Build And Flash
 
 ```sh
