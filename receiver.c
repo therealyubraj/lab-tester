@@ -68,6 +68,8 @@ static volatile uint8_t queue_head = 0;
 static volatile uint8_t queue_tail = 0;
 static volatile uint8_t queue_count = 0;
 static volatile uint16_t dropped_frames = 0;
+static volatile uint16_t captured_frames = 0;
+static volatile uint16_t invalid_frames = 0;
 
 static volatile uint8_t previous_clock = 0;
 static volatile uint8_t rolling = 0;
@@ -192,6 +194,7 @@ static void reset_rx_state(void)
   current_byte = 0;
   current_bit_count = 0;
   frame_byte_index = 0;
+  rolling = 0;
 }
 
 static void queue_completed_frame(void)
@@ -207,6 +210,7 @@ static void queue_completed_frame(void)
     queue_head = 0;
   }
   queue_count++;
+  captured_frames++;
 }
 
 static void process_frame_byte(uint8_t byte)
@@ -224,6 +228,7 @@ static void process_frame_byte(uint8_t byte)
   } else if (frame_byte_index == 4u) {
     building_frame.size = byte;
     if (byte < 2u || (uint8_t)(byte - 2u) > MAX_PAYLOAD_SIZE) {
+      invalid_frames++;
       reset_rx_state();
       return;
     }
@@ -302,11 +307,13 @@ static uint8_t dequeue_frame(struct QueuedFrame *frame)
 {
   uint8_t tail;
 
+  cli();
   if (queue_count == 0u) {
+    sei();
     return 0;
   }
-
   tail = queue_tail;
+  sei();
 
   frame->received_crc = frame_queue[tail].received_crc;
   frame->size = frame_queue[tail].size;
@@ -333,19 +340,19 @@ static uint8_t dequeue_frame(struct QueuedFrame *frame)
   return 1;
 }
 
-static uint16_t take_dropped_frames(void)
+static uint16_t take_counter(volatile uint16_t *counter)
 {
-  uint16_t dropped;
+  uint16_t value;
 
   cli();
-  dropped = dropped_frames;
-  dropped_frames = 0;
+  value = *counter;
+  *counter = 0;
   sei();
 
-  return dropped;
+  return value;
 }
 
-static void print_frame(const struct QueuedFrame *frame)
+static void print_frame(const struct QueuedFrame *frame, uint16_t printed_count)
 {
   uint32_t calculated_crc = frame_crc(frame);
 
@@ -366,6 +373,8 @@ static void print_frame(const struct QueuedFrame *frame)
   if (frame->truncated != 0u) {
     uart_puts(" truncated=1");
   }
+  uart_puts(" printed=");
+  uart_uint16(printed_count);
   uart_puts("\r\n");
 }
 
@@ -379,6 +388,7 @@ static void init_receiver_interrupt(void)
 int main(void)
 {
   struct QueuedFrame frame;
+  uint16_t printed_frames = 0;
 
   DDRD &= ~((1 << CLOCK_RX_PIN) | (1 << DATA_RX_PIN));
   PORTD &= ~((1 << CLOCK_RX_PIN) | (1 << DATA_RX_PIN));
@@ -390,15 +400,31 @@ int main(void)
   uart_puts("RECEIVER interrupt-ready\r\n");
 
   while (1) {
-    uint16_t dropped = take_dropped_frames();
+    uint16_t dropped = take_counter(&dropped_frames);
+    uint16_t invalid = take_counter(&invalid_frames);
+    uint16_t captured = take_counter(&captured_frames);
+
+    if (captured > 0u) {
+      uart_puts("CAPTURED ");
+      uart_uint16(captured);
+      uart_puts("\r\n");
+    }
+
     if (dropped > 0u) {
       uart_puts("DROPPED ");
       uart_uint16(dropped);
       uart_puts("\r\n");
     }
 
+    if (invalid > 0u) {
+      uart_puts("INVALID ");
+      uart_uint16(invalid);
+      uart_puts("\r\n");
+    }
+
     if (dequeue_frame(&frame) != 0u) {
-      print_frame(&frame);
+      printed_frames++;
+      print_frame(&frame, printed_frames);
     }
   }
 }
