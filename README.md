@@ -45,6 +45,8 @@ GND shared
 
 The relayer waits until it receives `s` or `S` on UART before forwarding pins.
 Send `x` or `X` to stop forwarding and drive its outputs low.
+While stopped, it prints `RELAYER idle` once per second. Unknown UART input
+prints `RELAYER unknown`.
 
 ## Build And Flash
 
@@ -95,6 +97,15 @@ INTER_FRAME_MS ?= 40
 or override it per command:
 
 ```sh
+make sender INTER_FRAME_MS=10
+```
+
+The Makefile includes the selected configuration in the build output path, so
+changing `INTER_FRAME_MS` recompiles the sender automatically. If you are unsure
+which binary is flashed, run:
+
+```sh
+make clean
 make sender INTER_FRAME_MS=10
 ```
 

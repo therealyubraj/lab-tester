@@ -19,6 +19,7 @@
 
 #include <avr/io.h>
 #include <stdint.h>
+#include <util/delay.h>
 
 #ifndef BAUD
 #define BAUD 115200UL
@@ -110,11 +111,16 @@ int main(void)
         enabled = 0;
         set_outputs_low();
         uart_puts("RELAYER stop\r\n");
+      } else {
+        uart_puts("RELAYER unknown\r\n");
       }
     }
 
     if (enabled != 0) {
       relay_tick();
+    } else {
+      uart_puts("RELAYER idle\r\n");
+      _delay_ms(1000);
     }
   }
 }

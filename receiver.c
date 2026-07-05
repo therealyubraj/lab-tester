@@ -87,14 +87,6 @@ static void uart_hex8(uint8_t value)
   uart_hex_nibble(value);
 }
 
-static void uart_hex32(uint32_t value)
-{
-  uart_hex8((uint8_t)(value >> 24));
-  uart_hex8((uint8_t)(value >> 16));
-  uart_hex8((uint8_t)(value >> 8));
-  uart_hex8((uint8_t)value);
-}
-
 static uint32_t crc_update_byte(uint32_t crc, uint8_t byte)
 {
   uint8_t table_index = (uint8_t)(((crc >> 24) ^ byte) & 0xFFu);
@@ -141,30 +133,22 @@ static void print_frame(uint32_t received_crc,
 {
   uint8_t payload_size = (uint8_t)(size - 2u);
 
-  uart_puts("FRAME crc=");
-  uart_hex32(received_crc);
-  uart_puts(" calc=");
-  uart_hex32(calculated_crc);
-  uart_puts(" ok=");
+  uart_puts("FRAME ok=");
   uart_putc(received_crc == calculated_crc ? '1' : '0');
-  uart_puts(" size=");
-  uart_hex8(size);
   uart_puts(" dst=");
   uart_hex8(destination);
   uart_puts(" src=");
   uart_hex8(source);
-  uart_puts(" payload=");
-
-  for (uint8_t i = 0; i < payload_size; i++) {
-    uart_hex8(payload[i]);
-  }
-
   uart_puts(" ascii=\"");
   for (uint8_t i = 0; i < payload_size; i++) {
     uint8_t c = payload[i];
     uart_putc((c >= 32u && c <= 126u && c != '"') ? (char)c : '.');
   }
   uart_puts("\"\r\n");
+
+  (void)received_crc;
+  (void)calculated_crc;
+  (void)size;
 }
 
 int main(void)

@@ -7,7 +7,9 @@ TEST_SOURCE ?= 0x58u
 TEST_DESTINATION ?= 0x00u
 PROGRAMMER ?= gpio
 PORT ?= /dev/spidev0.0
-BUILD_DIR ?= build
+BUILD_ROOT ?= build
+BUILD_CONFIG = $(MCU)-f$(F_CPU)-uart$(BAUD)-bps$(SEND_BPS)-gap$(INTER_FRAME_MS)-src$(TEST_SOURCE)-dst$(TEST_DESTINATION)
+BUILD_DIR = $(BUILD_ROOT)/$(BUILD_CONFIG)
 
 CC = avr-gcc
 OBJCOPY = avr-objcopy
@@ -42,4 +44,4 @@ $(BUILD_DIR)/%.hex: $(BUILD_DIR)/%.elf
 	$(OBJCOPY) -O ihex -R .eeprom $< $@
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_ROOT)

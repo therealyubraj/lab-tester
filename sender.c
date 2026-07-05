@@ -135,6 +135,20 @@ static void uart_hex8(uint8_t value)
   uart_hex_nibble(value);
 }
 
+static void uart_dec8(uint8_t value)
+{
+  if (value >= 100u) {
+    uart_putc((char)('0' + (value / 100u)));
+    value %= 100u;
+  }
+
+  if (value >= 10u) {
+    uart_putc((char)('0' + (value / 10u)));
+  }
+
+  uart_putc((char)('0' + (value % 10u)));
+}
+
 static uint8_t uart_has_byte(void)
 {
   return (UCSR0A & (1 << RXC0)) != 0 ? 1u : 0u;
@@ -219,9 +233,13 @@ static void send_frame(const struct TestMessage *msg)
   }
 }
 
-static void log_frame(const struct TestMessage *msg)
+static void log_frame(uint8_t index, uint8_t total, const struct TestMessage *msg)
 {
-  uart_puts("SENDER dst=");
+  uart_puts("SENDER ");
+  uart_dec8((uint8_t)(index + 1u));
+  uart_putc('/');
+  uart_dec8(total);
+  uart_puts(" dst=");
   uart_hex8(msg->destination);
   uart_puts(" src=");
   uart_hex8(msg->source);
@@ -251,8 +269,9 @@ int main(void)
 
     uart_puts("SENDER start\r\n");
 
-    for (uint8_t i = 0; i < (uint8_t)(sizeof(messages) / sizeof(messages[0])); i++) {
-      log_frame(&messages[i]);
+    uint8_t total = (uint8_t)(sizeof(messages) / sizeof(messages[0]));
+    for (uint8_t i = 0; i < total; i++) {
+      log_frame(i, total, &messages[i]);
       send_frame(&messages[i]);
       _delay_ms(INTER_FRAME_MS);
     }
