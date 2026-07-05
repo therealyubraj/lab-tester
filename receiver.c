@@ -1,16 +1,21 @@
 /*
- * Deterministic RASPNET test receiver.
+ * Interrupt-driven RASPNET test receiver.
  *
  * Wire this board after the implementation under test:
- *   DUT clock TX -> receiver PD4 clock RX
+ *   DUT clock TX -> receiver PD4 clock RX / PCINT20
  *   DUT data TX  -> receiver PD5 data RX
  *   GND shared
+ *
+ * The pin-change ISR captures every clock edge and queues completed frames.
+ * The main loop drains queued frames to UART, so UART output cannot block bit
+ * reception during a frame.
  */
 
 #ifndef F_CPU
 #define F_CPU 12000000UL
 #endif
 
+#include <avr/interrupt.h>
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <stdint.h>
@@ -19,16 +24,58 @@
 #define BAUD 115200UL
 #endif
 
+#ifndef RX_QUEUE_FRAMES
+#define RX_QUEUE_FRAMES 16u
+#endif
+
+#ifndef RX_QUEUE_PAYLOAD_SIZE
+#define RX_QUEUE_PAYLOAD_SIZE 32u
+#endif
+
+#if RX_QUEUE_FRAMES == 0
+#error "RX_QUEUE_FRAMES must be greater than zero"
+#endif
+
+#if RX_QUEUE_PAYLOAD_SIZE == 0
+#error "RX_QUEUE_PAYLOAD_SIZE must be greater than zero"
+#endif
+
 #define UART_UBRR ((F_CPU / 8UL / BAUD) - 1UL)
 
 #define CLOCK_RX_PIN PD4
 #define DATA_RX_PIN PD5
+#define CLOCK_RX_PCINT PCINT20
 
 #define PREAMBLE 0x7Eu
 #define MAX_PAYLOAD_SIZE 248u
 
 #define CLOCK_RX_VALUE() (((PIND & (1 << CLOCK_RX_PIN)) != 0) ? 1u : 0u)
 #define DATA_RX_VALUE() (((PIND & (1 << DATA_RX_PIN)) != 0) ? 1u : 0u)
+
+struct QueuedFrame {
+  uint32_t received_crc;
+  uint8_t size;
+  uint8_t destination;
+  uint8_t source;
+  uint8_t payload_size;
+  uint8_t stored_payload_size;
+  uint8_t truncated;
+  uint8_t payload[RX_QUEUE_PAYLOAD_SIZE];
+};
+
+static volatile struct QueuedFrame frame_queue[RX_QUEUE_FRAMES];
+static volatile uint8_t queue_head = 0;
+static volatile uint8_t queue_tail = 0;
+static volatile uint8_t queue_count = 0;
+static volatile uint16_t dropped_frames = 0;
+
+static volatile uint8_t previous_clock = 0;
+static volatile uint8_t rolling = 0;
+static volatile uint8_t receiving = 0;
+static volatile uint8_t current_byte = 0;
+static volatile uint8_t current_bit_count = 0;
+static volatile uint8_t frame_byte_index = 0;
+static volatile struct QueuedFrame building_frame;
 
 static const uint32_t crc_table[256] PROGMEM = {
   0x00000000u, 0x04C11DB7u, 0x09823B6Eu, 0x0D4326D9u, 0x130476DCu, 0x17C56B6Bu, 0x1A864DB2u, 0x1E475005u, 0x2608EDB8u, 0x22C9F00Fu, 0x2F8AD6D6u, 0x2B4BCB61u, 0x350C9B64u, 0x31CD86D3u, 0x3C8EA00Au, 0x384FBDBDu,
@@ -87,6 +134,26 @@ static void uart_hex8(uint8_t value)
   uart_hex_nibble(value);
 }
 
+static void uart_uint16(uint16_t value)
+{
+  char digits[5];
+  uint8_t count = 0;
+
+  if (value == 0u) {
+    uart_putc('0');
+    return;
+  }
+
+  while (value > 0u && count < sizeof(digits)) {
+    digits[count++] = (char)('0' + (value % 10u));
+    value /= 10u;
+  }
+
+  while (count > 0u) {
+    uart_putc(digits[--count]);
+  }
+}
+
 static uint32_t crc_update_byte(uint32_t crc, uint8_t byte)
 {
   uint8_t table_index = (uint8_t)(((crc >> 24) ^ byte) & 0xFFu);
@@ -101,105 +168,237 @@ static uint32_t crc_finalize(uint32_t crc)
          ((crc & 0xFF000000u) >> 24);
 }
 
-static uint8_t wait_edge(uint8_t *previous_clock)
+static uint32_t frame_crc(const struct QueuedFrame *frame)
 {
-  uint8_t current_clock;
+  uint32_t crc = 0;
 
-  do {
-    current_clock = CLOCK_RX_VALUE();
-  } while (current_clock == *previous_clock);
+  crc = crc_update_byte(crc, frame->destination);
+  crc = crc_update_byte(crc, frame->source);
 
-  *previous_clock = current_clock;
-  return DATA_RX_VALUE();
-}
-
-static uint8_t read_byte(uint8_t *previous_clock)
-{
-  uint8_t value = 0;
-
-  for (uint8_t i = 0; i < 8u; i++) {
-    value = (uint8_t)((value << 1) | wait_edge(previous_clock));
+  if (frame->truncated != 0u) {
+    return 0xFFFFFFFFu;
   }
 
-  return value;
+  for (uint8_t i = 0; i < frame->payload_size; i++) {
+    crc = crc_update_byte(crc, frame->payload[i]);
+  }
+
+  return crc_finalize(crc);
 }
 
-static void print_frame(uint32_t received_crc,
-                        uint32_t calculated_crc,
-                        uint8_t size,
-                        uint8_t destination,
-                        uint8_t source,
-                        const uint8_t *payload)
+static void reset_rx_state(void)
 {
-  uint8_t payload_size = (uint8_t)(size - 2u);
+  receiving = 0;
+  current_byte = 0;
+  current_bit_count = 0;
+  frame_byte_index = 0;
+}
+
+static void queue_completed_frame(void)
+{
+  if (queue_count >= RX_QUEUE_FRAMES) {
+    dropped_frames++;
+    return;
+  }
+
+  frame_queue[queue_head] = building_frame;
+  queue_head++;
+  if (queue_head >= RX_QUEUE_FRAMES) {
+    queue_head = 0;
+  }
+  queue_count++;
+}
+
+static void process_frame_byte(uint8_t byte)
+{
+  uint8_t payload_index;
+
+  if (frame_byte_index == 0u) {
+    building_frame.received_crc = (uint32_t)byte;
+  } else if (frame_byte_index == 1u) {
+    building_frame.received_crc |= ((uint32_t)byte << 8);
+  } else if (frame_byte_index == 2u) {
+    building_frame.received_crc |= ((uint32_t)byte << 16);
+  } else if (frame_byte_index == 3u) {
+    building_frame.received_crc |= ((uint32_t)byte << 24);
+  } else if (frame_byte_index == 4u) {
+    building_frame.size = byte;
+    if (byte < 2u || (uint8_t)(byte - 2u) > MAX_PAYLOAD_SIZE) {
+      reset_rx_state();
+      return;
+    }
+    building_frame.payload_size = (uint8_t)(byte - 2u);
+    building_frame.stored_payload_size = 0;
+    building_frame.truncated = 0;
+  } else if (frame_byte_index == 5u) {
+    building_frame.destination = byte;
+  } else if (frame_byte_index == 6u) {
+    building_frame.source = byte;
+    if (building_frame.payload_size == 0u) {
+      queue_completed_frame();
+      reset_rx_state();
+      return;
+    }
+  } else {
+    payload_index = (uint8_t)(frame_byte_index - 7u);
+    if (payload_index < RX_QUEUE_PAYLOAD_SIZE) {
+      building_frame.payload[payload_index] = byte;
+      building_frame.stored_payload_size++;
+    } else {
+      building_frame.truncated = 1;
+    }
+
+    if ((uint8_t)(payload_index + 1u) >= building_frame.payload_size) {
+      queue_completed_frame();
+      reset_rx_state();
+      return;
+    }
+  }
+
+  frame_byte_index++;
+}
+
+ISR(PCINT2_vect)
+{
+  uint8_t clock_value = CLOCK_RX_VALUE();
+  uint8_t data_value;
+
+  if (clock_value == previous_clock) {
+    return;
+  }
+  previous_clock = clock_value;
+
+  data_value = DATA_RX_VALUE();
+
+  if (receiving == 0u) {
+    rolling = (uint8_t)((rolling << 1) | data_value);
+    if (rolling == PREAMBLE) {
+      receiving = 1;
+      current_byte = 0;
+      current_bit_count = 0;
+      frame_byte_index = 0;
+      building_frame.received_crc = 0;
+      building_frame.size = 0;
+      building_frame.destination = 0;
+      building_frame.source = 0;
+      building_frame.payload_size = 0;
+      building_frame.stored_payload_size = 0;
+      building_frame.truncated = 0;
+    }
+    return;
+  }
+
+  current_byte = (uint8_t)((current_byte << 1) | data_value);
+  current_bit_count++;
+
+  if (current_bit_count >= 8u) {
+    process_frame_byte(current_byte);
+    current_byte = 0;
+    current_bit_count = 0;
+  }
+}
+
+static uint8_t dequeue_frame(struct QueuedFrame *frame)
+{
+  uint8_t tail;
+
+  if (queue_count == 0u) {
+    return 0;
+  }
+
+  tail = queue_tail;
+
+  frame->received_crc = frame_queue[tail].received_crc;
+  frame->size = frame_queue[tail].size;
+  frame->destination = frame_queue[tail].destination;
+  frame->source = frame_queue[tail].source;
+  frame->payload_size = frame_queue[tail].payload_size;
+  frame->stored_payload_size = frame_queue[tail].stored_payload_size;
+  frame->truncated = frame_queue[tail].truncated;
+
+  for (uint8_t i = 0; i < frame->stored_payload_size; i++) {
+    frame->payload[i] = frame_queue[tail].payload[i];
+  }
+
+  cli();
+  if (queue_count > 0u && queue_tail == tail) {
+    queue_tail++;
+    if (queue_tail >= RX_QUEUE_FRAMES) {
+      queue_tail = 0;
+    }
+    queue_count--;
+  }
+  sei();
+
+  return 1;
+}
+
+static uint16_t take_dropped_frames(void)
+{
+  uint16_t dropped;
+
+  cli();
+  dropped = dropped_frames;
+  dropped_frames = 0;
+  sei();
+
+  return dropped;
+}
+
+static void print_frame(const struct QueuedFrame *frame)
+{
+  uint32_t calculated_crc = frame_crc(frame);
 
   uart_puts("FRAME ok=");
-  uart_putc(received_crc == calculated_crc ? '1' : '0');
+  uart_putc(frame->received_crc == calculated_crc ? '1' : '0');
   uart_puts(" dst=");
-  uart_hex8(destination);
+  uart_hex8(frame->destination);
   uart_puts(" src=");
-  uart_hex8(source);
+  uart_hex8(frame->source);
   uart_puts(" ascii=\"");
-  for (uint8_t i = 0; i < payload_size; i++) {
-    uint8_t c = payload[i];
+
+  for (uint8_t i = 0; i < frame->stored_payload_size; i++) {
+    uint8_t c = frame->payload[i];
     uart_putc((c >= 32u && c <= 126u && c != '"') ? (char)c : '.');
   }
-  uart_puts("\"\r\n");
 
-  (void)received_crc;
-  (void)calculated_crc;
-  (void)size;
+  uart_puts("\"");
+  if (frame->truncated != 0u) {
+    uart_puts(" truncated=1");
+  }
+  uart_puts("\r\n");
+}
+
+static void init_receiver_interrupt(void)
+{
+  previous_clock = CLOCK_RX_VALUE();
+  PCICR |= (1 << PCIE2);
+  PCMSK2 |= (1 << CLOCK_RX_PCINT);
 }
 
 int main(void)
 {
-  uint8_t previous_clock;
-  uint8_t rolling = 0;
-  uint8_t payload[MAX_PAYLOAD_SIZE];
+  struct QueuedFrame frame;
 
   DDRD &= ~((1 << CLOCK_RX_PIN) | (1 << DATA_RX_PIN));
   PORTD &= ~((1 << CLOCK_RX_PIN) | (1 << DATA_RX_PIN));
-  uart_init();
-  uart_puts("RECEIVER start\r\n");
 
-  previous_clock = CLOCK_RX_VALUE();
+  uart_init();
+  init_receiver_interrupt();
+  sei();
+
+  uart_puts("RECEIVER interrupt-ready\r\n");
 
   while (1) {
-    rolling = (uint8_t)((rolling << 1) | wait_edge(&previous_clock));
+    uint16_t dropped = take_dropped_frames();
+    if (dropped > 0u) {
+      uart_puts("DROPPED ");
+      uart_uint16(dropped);
+      uart_puts("\r\n");
+    }
 
-    if (rolling == PREAMBLE) {
-      uint32_t received_crc = 0;
-      uint32_t calculated_crc = 0;
-      uint8_t size;
-      uint8_t destination;
-      uint8_t source;
-
-      received_crc = (uint32_t)read_byte(&previous_clock);
-      received_crc |= ((uint32_t)read_byte(&previous_clock) << 8);
-      received_crc |= ((uint32_t)read_byte(&previous_clock) << 16);
-      received_crc |= ((uint32_t)read_byte(&previous_clock) << 24);
-
-      size = read_byte(&previous_clock);
-      destination = read_byte(&previous_clock);
-      source = read_byte(&previous_clock);
-
-      if (size < 2u || (uint8_t)(size - 2u) > MAX_PAYLOAD_SIZE) {
-        uart_puts("ERROR invalid-size\r\n");
-        rolling = 0;
-        continue;
-      }
-
-      calculated_crc = crc_update_byte(calculated_crc, destination);
-      calculated_crc = crc_update_byte(calculated_crc, source);
-
-      for (uint8_t i = 0; i < (uint8_t)(size - 2u); i++) {
-        payload[i] = read_byte(&previous_clock);
-        calculated_crc = crc_update_byte(calculated_crc, payload[i]);
-      }
-
-      calculated_crc = crc_finalize(calculated_crc);
-      print_frame(received_crc, calculated_crc, size, destination, source, payload);
-      rolling = 0;
+    if (dequeue_frame(&frame) != 0u) {
+      print_frame(&frame);
     }
   }
 }

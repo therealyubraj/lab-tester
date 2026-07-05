@@ -127,6 +127,21 @@ Build without flashing:
 ```sh
 make sender-build
 make receiver-build
+make relayer-build
+```
+
+The receiver captures frames in a pin-change interrupt and drains them to UART
+from the main loop. Its queue is configurable:
+
+```make
+RX_QUEUE_FRAMES ?= 16u
+RX_QUEUE_PAYLOAD_SIZE ?= 32u
+```
+
+For larger payloads or longer bursts:
+
+```sh
+make receiver RX_QUEUE_FRAMES=20u RX_QUEUE_PAYLOAD_SIZE=64u
 ```
 
 ## Expected Test Behavior
