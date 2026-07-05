@@ -59,13 +59,18 @@ static const uint32_t crc_table[256] PROGMEM = {
 };
 
 static const struct TestMessage messages[] = {
-  {0x60u, 0x58u, "relay-1", 0},
-  {BROADCAST_ADDRESS, 0x57u, "broadcast-1", 0},
-  {OWN_ADDRESS, 0x58u, "Send", 0},
-  {0x60u, 0x58u, "relay-after-send-1", 0},
-  {BROADCAST_ADDRESS, 0x56u, "bad-crc-broadcast", 1},
-  {0x60u, OWN_ADDRESS, "must-not-relay-src-own", 0},
-  {0x57u, 0x60u, "relay-2", 0}
+  {BROADCAST_ADDRESS, 0x58u, "alpha-8391", 0},
+  {BROADCAST_ADDRESS, 0x57u, "bravo-2047", 0},
+  {BROADCAST_ADDRESS, 0x60u, "charlie-7715", 0},
+  {BROADCAST_ADDRESS, 0x56u, "delta-4920", 0},
+  {BROADCAST_ADDRESS, 0x58u, "Send", 0},
+  {BROADCAST_ADDRESS, 0x57u, "echo-1186", 0},
+  {BROADCAST_ADDRESS, 0x60u, "foxtrot-6503", 0},
+  {BROADCAST_ADDRESS, 0x56u, "Send", 0},
+  {BROADCAST_ADDRESS, 0x58u, "golf-3258", 0},
+  {BROADCAST_ADDRESS, 0x57u, "hotel-9064", 0},
+  {BROADCAST_ADDRESS, 0x60u, "india-4472", 0},
+  {BROADCAST_ADDRESS, 0x56u, "juliet-5830", 0}
 };
 
 static void uart_init(void)

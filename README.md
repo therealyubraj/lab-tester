@@ -52,11 +52,9 @@ make receiver-build
 
 The sender emits:
 
-- normal relay frames
-- a broadcast relay frame
-- a `Send` payload addressed to `0x59`
-- more relay pressure after the trigger
-- one bad-CRC broadcast that should still be relayed
-- one frame with source `0x59` that should not be relayed
+- 10 broadcast frames with random-looking payloads
+- 2 broadcast frames with payload `Send`
+- relay pressure before, between, and after the `Send` triggers
 
-The verifier defaults expect 5 relayed frames and 1 own frame from the DUT.
+The verifier defaults expect 12 relayed broadcast frames and 2 own frames from
+the DUT.

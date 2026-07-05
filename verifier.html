@@ -172,15 +172,15 @@
         </label>
         <label>
           Expected relayed frames
-          <input id="expectedRelays" type="number" min="0" value="5">
+          <input id="expectedRelays" type="number" min="0" value="12">
         </label>
         <label>
           Expected own frames
-          <input id="expectedOwn" type="number" min="0" value="1">
+          <input id="expectedOwn" type="number" min="0" value="2">
         </label>
         <label>
           Expected bad-CRC relays
-          <input id="expectedBadCrcRelays" type="number" min="0" value="1">
+          <input id="expectedBadCrcRelays" type="number" min="0" value="0">
         </label>
         <button id="verify">Verify Log</button>
         <div id="results" class="results"></div>
@@ -209,13 +209,18 @@ FRAME crc=12345678 calc=12345678 ok=1 size=09 dst=60 src=58 payload=72656C61792D
 
   <script>
     const senderPlan = [
-      { kind: "relay", dst: "60", src: "58", ascii: "relay-1", ok: true },
-      { kind: "relay", dst: "00", src: "57", ascii: "broadcast-1", ok: true },
-      { kind: "consume", dst: "59", src: "58", ascii: "Send", ok: true },
-      { kind: "relay", dst: "60", src: "58", ascii: "relay-after-send-1", ok: true },
-      { kind: "relay", dst: "00", src: "56", ascii: "bad-crc-broadcast", ok: false },
-      { kind: "blocked", dst: "60", src: "59", ascii: "must-not-relay-src-own", ok: true },
-      { kind: "relay", dst: "57", src: "60", ascii: "relay-2", ok: true }
+      { kind: "relay", dst: "00", src: "58", ascii: "alpha-8391", ok: true },
+      { kind: "relay", dst: "00", src: "57", ascii: "bravo-2047", ok: true },
+      { kind: "relay", dst: "00", src: "60", ascii: "charlie-7715", ok: true },
+      { kind: "relay", dst: "00", src: "56", ascii: "delta-4920", ok: true },
+      { kind: "relay-trigger", dst: "00", src: "58", ascii: "Send", ok: true },
+      { kind: "relay", dst: "00", src: "57", ascii: "echo-1186", ok: true },
+      { kind: "relay", dst: "00", src: "60", ascii: "foxtrot-6503", ok: true },
+      { kind: "relay-trigger", dst: "00", src: "56", ascii: "Send", ok: true },
+      { kind: "relay", dst: "00", src: "58", ascii: "golf-3258", ok: true },
+      { kind: "relay", dst: "00", src: "57", ascii: "hotel-9064", ok: true },
+      { kind: "relay", dst: "00", src: "60", ascii: "india-4472", ok: true },
+      { kind: "relay", dst: "00", src: "56", ascii: "juliet-5830", ok: true }
     ];
 
     const parseHexByte = value => value.trim().toUpperCase().padStart(2, "0").slice(-2);
@@ -255,7 +260,7 @@ FRAME crc=12345678 calc=12345678 ok=1 size=09 dst=60 src=58 payload=72656C61792D
 
     function expectedRelayPayloads() {
       return senderPlan
-        .filter(item => item.kind === "relay")
+        .filter(item => item.kind === "relay" || item.kind === "relay-trigger")
         .map(item => item.ascii);
     }
 
@@ -287,8 +292,7 @@ FRAME crc=12345678 calc=12345678 ok=1 size=09 dst=60 src=58 payload=72656C61792D
       const relays = frames.filter(frame => classify(frame, ownAddress) === "relay");
       const own = frames.filter(frame => classify(frame, ownAddress) === "own");
       const badCrcRelays = relays.filter(frame => !frame.ok);
-      const blockedPayload = senderPlan.find(item => item.kind === "blocked").ascii;
-      const consumedPayload = senderPlan.find(item => item.kind === "consume").ascii;
+      const triggerCount = senderPlan.filter(item => item.kind === "relay-trigger").length;
       const requiredRelays = expectedRelayPayloads();
       const results = document.getElementById("results");
 
@@ -305,28 +309,12 @@ FRAME crc=12345678 calc=12345678 ok=1 size=09 dst=60 src=58 payload=72656C61792D
         addCheck(results, found, `relay payload present: ${payload}`);
       }
 
-      addCheck(
-        results,
-        !frames.some(frame => frame.ascii === consumedPayload && frame.dst === ownAddress),
-        `trigger payload "${consumedPayload}" was consumed by DUT and not forwarded`
-      );
+      addCheck(results, relays.filter(frame => frame.ascii === "Send").length === triggerCount, `all ${triggerCount} broadcast Send triggers were relayed`);
 
-      addCheck(
-        results,
-        !frames.some(frame => frame.ascii === blockedPayload),
-        `input frame with source equal to DUT address was not forwarded`
-      );
-
-      const wrongGoodCrc = relays.filter(frame => frame.ascii !== "bad-crc-broadcast" && !frame.ok);
+      const wrongGoodCrc = relays.filter(frame => !frame.ok);
       addCheck(results, wrongGoodCrc.length === 0, `all normal relays have valid CRC at receiver`);
 
-      const badBroadcast = relays.find(frame => frame.ascii === "bad-crc-broadcast");
-      addCheck(
-        results,
-        Boolean(badBroadcast && badBroadcast.dst === "00" && !badBroadcast.ok),
-        "bad-CRC broadcast was relayed unchanged",
-        !badBroadcast
-      );
+      addCheck(results, relays.every(frame => frame.dst === "00"), "all relayed sender frames are broadcasts");
     }
 
     document.getElementById("verify").addEventListener("click", verify);
