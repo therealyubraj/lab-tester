@@ -2,6 +2,7 @@ MCU ?= atmega328p
 F_CPU ?= 12000000UL
 BAUD ?= 115200UL
 SEND_BPS ?= 1000UL
+INTER_FRAME_MS ?= 40
 TEST_SOURCE ?= 0x58u
 TEST_DESTINATION ?= 0x00u
 PROGRAMMER ?= gpio
@@ -12,7 +13,7 @@ CC = avr-gcc
 OBJCOPY = avr-objcopy
 AVRDUDE = avrdude
 
-CFLAGS = -mmcu=$(MCU) -DF_CPU=$(F_CPU) -DBAUD=$(BAUD) -DSEND_BPS=$(SEND_BPS) -DTEST_SOURCE=$(TEST_SOURCE) -DTEST_DESTINATION=$(TEST_DESTINATION) -Os -Wall -Wextra -std=c11
+CFLAGS = -mmcu=$(MCU) -DF_CPU=$(F_CPU) -DBAUD=$(BAUD) -DSEND_BPS=$(SEND_BPS) -DINTER_FRAME_MS=$(INTER_FRAME_MS) -DTEST_SOURCE=$(TEST_SOURCE) -DTEST_DESTINATION=$(TEST_DESTINATION) -Os -Wall -Wextra -std=c11
 
 .PHONY: all sender receiver relayer sender-build receiver-build relayer-build clean
 

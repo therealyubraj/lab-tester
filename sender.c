@@ -33,6 +33,10 @@
 #define TEST_DESTINATION BROADCAST_ADDRESS
 #endif
 
+#ifndef INTER_FRAME_MS
+#define INTER_FRAME_MS 40
+#endif
+
 #if SEND_BPS == 0
 #error "SEND_BPS must be greater than zero"
 #endif
@@ -250,7 +254,7 @@ int main(void)
     for (uint8_t i = 0; i < (uint8_t)(sizeof(messages) / sizeof(messages[0])); i++) {
       log_frame(&messages[i]);
       send_frame(&messages[i]);
-      _delay_ms(40);
+      _delay_ms(INTER_FRAME_MS);
     }
 
     uart_puts("SENDER done\r\n");

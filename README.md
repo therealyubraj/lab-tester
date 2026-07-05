@@ -83,6 +83,18 @@ or override it per command:
 make sender SEND_BPS=2000UL
 ```
 
+Change the pause between sender frames in one place:
+
+```make
+INTER_FRAME_MS ?= 40
+```
+
+or override it per command:
+
+```sh
+make sender INTER_FRAME_MS=10
+```
+
 Change the sender frame source and destination in one place:
 
 ```make
