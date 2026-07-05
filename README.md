@@ -147,11 +147,14 @@ make receiver RX_QUEUE_FRAMES=20u RX_QUEUE_PAYLOAD_SIZE=64u
 Receiver diagnostics:
 
 ```text
-CAPTURED N   completed frames queued by the interrupt
 DROPPED N    completed frames lost because the queue was full
 INVALID N    frames abandoned because the size field was invalid
-FRAME ... printed=N
+FRAME ... printed=N captured=N queued=N
 ```
+
+`printed` and `captured` are cumulative since boot. `queued` is the number of
+completed frames still waiting in the receiver queue after this frame was
+printed.
 
 ## Expected Test Behavior
 

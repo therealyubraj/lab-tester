@@ -68,7 +68,7 @@ static volatile uint8_t queue_head = 0;
 static volatile uint8_t queue_tail = 0;
 static volatile uint8_t queue_count = 0;
 static volatile uint16_t dropped_frames = 0;
-static volatile uint16_t captured_frames = 0;
+static volatile uint16_t captured_total = 0;
 static volatile uint16_t invalid_frames = 0;
 
 static volatile uint8_t previous_clock = 0;
@@ -210,7 +210,7 @@ static void queue_completed_frame(void)
     queue_head = 0;
   }
   queue_count++;
-  captured_frames++;
+  captured_total++;
 }
 
 static void process_frame_byte(uint8_t byte)
@@ -352,7 +352,32 @@ static uint16_t take_counter(volatile uint16_t *counter)
   return value;
 }
 
-static void print_frame(const struct QueuedFrame *frame, uint16_t printed_count)
+static uint16_t read_counter(volatile uint16_t *counter)
+{
+  uint16_t value;
+
+  cli();
+  value = *counter;
+  sei();
+
+  return value;
+}
+
+static uint8_t read_queue_count(void)
+{
+  uint8_t value;
+
+  cli();
+  value = queue_count;
+  sei();
+
+  return value;
+}
+
+static void print_frame(const struct QueuedFrame *frame,
+                        uint16_t printed_count,
+                        uint16_t captured_count,
+                        uint8_t queued_count)
 {
   uint32_t calculated_crc = frame_crc(frame);
 
@@ -375,6 +400,10 @@ static void print_frame(const struct QueuedFrame *frame, uint16_t printed_count)
   }
   uart_puts(" printed=");
   uart_uint16(printed_count);
+  uart_puts(" captured=");
+  uart_uint16(captured_count);
+  uart_puts(" queued=");
+  uart_uint16(queued_count);
   uart_puts("\r\n");
 }
 
@@ -402,13 +431,6 @@ int main(void)
   while (1) {
     uint16_t dropped = take_counter(&dropped_frames);
     uint16_t invalid = take_counter(&invalid_frames);
-    uint16_t captured = take_counter(&captured_frames);
-
-    if (captured > 0u) {
-      uart_puts("CAPTURED ");
-      uart_uint16(captured);
-      uart_puts("\r\n");
-    }
 
     if (dropped > 0u) {
       uart_puts("DROPPED ");
@@ -424,7 +446,10 @@ int main(void)
 
     if (dequeue_frame(&frame) != 0u) {
       printed_frames++;
-      print_frame(&frame, printed_frames);
+      print_frame(&frame,
+                  printed_frames,
+                  read_counter(&captured_total),
+                  read_queue_count());
     }
   }
 }
