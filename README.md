@@ -58,3 +58,6 @@ The sender emits:
 
 The verifier defaults expect 12 relayed broadcast frames and 2 own frames from
 the DUT.
+
+The sender waits until it receives `s` or `S` on UART, then sends the full test
+sequence once. Send `s` again to repeat the run.

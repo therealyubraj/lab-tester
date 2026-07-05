@@ -78,7 +78,7 @@ static void uart_init(void)
   UBRR0H = (uint8_t)(UART_UBRR >> 8);
   UBRR0L = (uint8_t)UART_UBRR;
   UCSR0A |= (1 << U2X0);
-  UCSR0B |= (1 << TXEN0);
+  UCSR0B |= (1 << RXEN0) | (1 << TXEN0);
   UCSR0C |= (1 << UCSZ01) | (1 << UCSZ00);
 }
 
@@ -93,6 +93,16 @@ static void uart_puts(const char *s)
   while (*s != '\0') {
     uart_putc(*s++);
   }
+}
+
+static uint8_t uart_has_byte(void)
+{
+  return (UCSR0A & (1 << RXC0)) != 0 ? 1u : 0u;
+}
+
+static uint8_t uart_getc(void)
+{
+  return UDR0;
 }
 
 static uint32_t crc_update_byte(uint32_t crc, uint8_t byte)
@@ -176,19 +186,26 @@ int main(void)
   DATA_TX_LOW();
   uart_init();
 
-  _delay_ms(1000);
-  uart_puts("SENDER start\r\n");
-
-  for (uint8_t i = 0; i < (uint8_t)(sizeof(messages) / sizeof(messages[0])); i++) {
-    uart_puts("SENDER frame\r\n");
-    send_frame(&messages[i]);
-    _delay_ms(40);
-  }
-
-  uart_puts("SENDER done\r\n");
-
   while (1) {
     DATA_TX_LOW();
-    _delay_ms(1000);
+
+    if (uart_has_byte() == 0) {
+      continue;
+    }
+
+    uint8_t command = uart_getc();
+    if (command != 's' && command != 'S') {
+      continue;
+    }
+
+    uart_puts("SENDER start\r\n");
+
+    for (uint8_t i = 0; i < (uint8_t)(sizeof(messages) / sizeof(messages[0])); i++) {
+      uart_puts("SENDER frame\r\n");
+      send_frame(&messages[i]);
+      _delay_ms(40);
+    }
+
+    uart_puts("SENDER done\r\n");
   }
 }
