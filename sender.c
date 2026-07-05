@@ -98,7 +98,11 @@ static void uart_puts(const char *s)
 static void uart_hex_nibble(uint8_t value)
 {
   value &= 0x0Fu;
-  uart_putc((char)(value < 10u ? ('0' + value) : ('A' + value - 10u)));
+  if (value < 10u) {
+    uart_putc((char)('0' + value));
+  } else {
+    uart_putc((char)('A' + (value - 10u)));
+  }
 }
 
 static void uart_hex8(uint8_t value)
