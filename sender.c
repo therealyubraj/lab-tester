@@ -17,7 +17,10 @@
 #include <string.h>
 #include <util/delay.h>
 
+#ifndef BAUD
 #define BAUD 115200UL
+#endif
+
 #define UART_UBRR ((F_CPU / 8UL / BAUD) - 1UL)
 
 #define CLOCK_TX_PIN PB4

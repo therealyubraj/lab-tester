@@ -15,7 +15,10 @@
 #include <avr/pgmspace.h>
 #include <stdint.h>
 
+#ifndef BAUD
 #define BAUD 115200UL
+#endif
+
 #define UART_UBRR ((F_CPU / 8UL / BAUD) - 1UL)
 
 #define CLOCK_RX_PIN PD4

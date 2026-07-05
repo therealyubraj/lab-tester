@@ -41,6 +41,19 @@ make sender PORT=/dev/spidev0.1 PROGRAMMER=gpio
 make receiver PORT=/dev/ttyACM0 PROGRAMMER=arduino
 ```
 
+Change the UART baud rate in one place:
+
+```make
+BAUD ?= 115200UL
+```
+
+or override it per command:
+
+```sh
+make sender BAUD=57600UL
+make receiver BAUD=57600UL
+```
+
 Build without flashing:
 
 ```sh

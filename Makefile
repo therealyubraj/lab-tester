@@ -1,5 +1,6 @@
 MCU ?= atmega328p
 F_CPU ?= 12000000UL
+BAUD ?= 115200UL
 PROGRAMMER ?= gpio
 PORT ?= /dev/spidev0.0
 BUILD_DIR ?= build
@@ -8,7 +9,7 @@ CC = avr-gcc
 OBJCOPY = avr-objcopy
 AVRDUDE = avrdude
 
-CFLAGS = -mmcu=$(MCU) -DF_CPU=$(F_CPU) -Os -Wall -Wextra -std=c11
+CFLAGS = -mmcu=$(MCU) -DF_CPU=$(F_CPU) -DBAUD=$(BAUD) -Os -Wall -Wextra -std=c11
 
 .PHONY: all sender receiver sender-build receiver-build clean
 
